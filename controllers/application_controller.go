@@ -18,13 +18,18 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	appsv1 "github.com/ljy-life/application-operator/api/v1"
+	dappsv1 "github.com/ljy-life/application-operator/api/v1"
 )
 
 // ApplicationReconciler reconciles a Application object
@@ -33,30 +38,44 @@ type ApplicationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=apps.whale.liu,resources=applications,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=apps.whale.liu,resources=applications/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=apps.whale.liu,resources=applications/finalizers,verbs=update
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Application object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.2/pkg/reconcile
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	l := log.FromContext(ctx)
+	// 获取 application 资源
+	app := &dappsv1.Application{}
+	if err := r.Get(ctx, req.NamespacedName, app); err != nil {
+		if errors.IsNotFound(err) {
+			l.Info("这个 application 没有找到")
+			return ctrl.Result{}, nil
+		}
+		l.Error(err, "获取 application 失败")
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
 
+	// 获取 pod
+	for i := 0; i < int(app.Spec.Replicas); i++ {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%d", app.Name, i),
+				Namespace: app.Namespace,
+				Labels:    app.Labels,
+			},
+			Spec: app.Spec.Template.Spec,
+		}
+		if err := r.Create(ctx, pod); err != nil {
+			l.Error(err, "创建 pod 失败！！")
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
+		l.Info(fmt.Sprintf("这个 pod (%s) 已创建", pod.Name))
+	}
+	l.Info("所有的 pod 已经创建")
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&appsv1.Application{}).
+		For(&dappsv1.Application{}).
 		Complete(r)
 }

@@ -2,5 +2,15 @@ apiVersion: apps.whale.liu/v1
 kind: Application
 metadata:
   name: application-sample
+  namespace: default
+  labels:
+    app: nginx
 spec:
-  # TODO(user): Add fields here
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
