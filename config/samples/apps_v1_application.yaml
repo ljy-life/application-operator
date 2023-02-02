@@ -1,0 +1,6 @@
+apiVersion: apps.whale.liu/v1
+kind: Application
+metadata:
+  name: application-sample
+spec:
+  # TODO(user): Add fields here
